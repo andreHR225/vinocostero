@@ -1,0 +1,73 @@
+// SQLite schema for quick local demo
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Parcel {
+  id        Int         @id @default(autoincrement())
+  name      String
+  location  String?
+  isActive  Boolean     @default(true)
+  plantings Planting[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model GrapeType {
+  id        Int         @id @default(autoincrement())
+  name      String      @unique
+  notes     String?
+  plantings Planting[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model Disease {
+  id        Int                 @id @default(autoincrement())
+  name      String              @unique
+  severity  String?
+  notes     String?
+  plantings PlantingDisease[]
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+}
+
+model Planting {
+  id           Int              @id @default(autoincrement())
+  parcelId     Int
+  grapeTypeId  Int
+  sowDate      DateTime
+  labBrix      Float?
+  status       String           @default("ACTIVE")
+  diseases     PlantingDisease[]
+  harvests     Harvest[]
+  Parcel       Parcel           @relation(fields: [parcelId], references: [id])
+  GrapeType    GrapeType        @relation(fields: [grapeTypeId], references: [id])
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+}
+
+model PlantingDisease {
+  plantingId Int
+  diseaseId  Int
+  detectedAt DateTime @default(now())
+  notes      String?
+  Planting   Planting @relation(fields: [plantingId], references: [id])
+  Disease    Disease  @relation(fields: [diseaseId], references: [id])
+  @@id([plantingId, diseaseId])
+}
+
+model Harvest {
+  id          Int       @id @default(autoincrement())
+  plantingId  Int
+  date        DateTime
+  quantityKg  Float
+  quality     String?
+  Planting    Planting  @relation(fields: [plantingId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
