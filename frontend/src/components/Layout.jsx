@@ -1,8 +1,14 @@
 import React from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useAuthInterceptor, getToken, clearToken, parseJwt } from '../api/http.js';
 
 export default function Layout(){
+  useAuthInterceptor();
+  const nav = useNavigate();
+  const token = getToken();
+  const payload = token ? parseJwt(token) : null;
   const linkClass = ({ isActive }) => `nav-link${isActive ? ' active' : ''}`;
+
   return (
     <div>
       <header className="navbar">
@@ -15,12 +21,14 @@ export default function Layout(){
           <NavLink to="/plantings" className={linkClass}>Siembras</NavLink>
           <NavLink to="/harvests" className={linkClass}>Cosechas</NavLink>
         </nav>
-      </header>
-      <main className="container">
-        <div className="card">
-          <Outlet />
+        <div style={{marginLeft:'auto', display:'flex', gap:8, alignItems:'center'}}>
+          {payload && <span style={{opacity:.8, fontSize:13}}>{payload.email} ({payload.role})</span>}
+          <button className="secondary" onClick={()=>{ clearToken(); nav('/login'); }}>
+            Salir
+          </button>
         </div>
-      </main>
+      </header>
+      <main className="container"><div className="card"><Outlet /></div></main>
     </div>
   );
 }

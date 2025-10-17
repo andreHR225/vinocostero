@@ -1,12 +1,44 @@
 import { Router } from 'express';
-import { prisma } from '../prismaClient.js';
 import { z } from 'zod';
+import { prisma } from '../prismaClient.js';
 import { idParam, validate, asyncHandler } from '../utils.js';
+import { requireRole } from '../middlewares/simpleAuth.js';
+
 const r = Router();
-const schema = z.object({ name: z.string().min(1), severity: z.string().optional(), notes: z.string().optional() });
-r.get('/', asyncHandler(async (_req, res)=>{ const items = await prisma.disease.findMany({ orderBy: { name: 'asc' } }); res.json(items); }));
-r.get('/:id', asyncHandler(async (req, res)=>{ const { id } = validate(idParam, req.params); const item = await prisma.disease.findUnique({ where: { id } }); if(!item) return res.status(404).json({ message: 'disease not found' }); res.json(item); }));
-r.post('/', asyncHandler(async (req, res)=>{ const data = validate(schema, req.body); const created = await prisma.disease.create({ data }); res.status(201).json(created); }));
-r.put('/:id', asyncHandler(async (req, res)=>{ const { id } = validate(idParam, req.params); const data = validate(schema.partial(), req.body); const updated = await prisma.disease.update({ where: { id }, data }); res.json(updated); }));
-r.delete('/:id', asyncHandler(async (req, res)=>{ const { id } = validate(idParam, req.params); await prisma.disease.delete({ where: { id } }); res.status(204).end(); }));
+const schema = z.object({
+  name: z.string().min(1),
+  severity: z.string().optional(),
+  notes: z.string().optional()
+});
+
+r.get('/', asyncHandler(async (_req,res)=>{
+  res.json(await prisma.disease.findMany({ orderBy:{ name:'asc' } }));
+}));
+
+r.get('/:id', asyncHandler(async (req,res)=>{
+  const {id}=validate(idParam, req.params);
+  const it=await prisma.disease.findUnique({ where:{id} });
+  if(!it) return res.status(404).json({message:'disease not found'});
+  res.json(it);
+}));
+
+r.post('/', requireRole('admin'), asyncHandler(async (req,res)=>{
+  const data=validate(schema, req.body);
+  const created=await prisma.disease.create({ data });
+  res.status(201).json(created);
+}));
+
+r.put('/:id', requireRole('admin'), asyncHandler(async (req,res)=>{
+  const {id}=validate(idParam, req.params);
+  const data=validate(schema.partial(), req.body);
+  const upd=await prisma.disease.update({ where:{id}, data });
+  res.json(upd);
+}));
+
+r.delete('/:id', requireRole('admin'), asyncHandler(async (req,res)=>{
+  const {id}=validate(idParam, req.params);
+  await prisma.disease.delete({ where:{id} });
+  res.status(204).end();
+}));
+
 export default r;
