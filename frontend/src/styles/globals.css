@@ -112,3 +112,8 @@ details summary{
   cursor: pointer;
   color: var(--muted);
 }
+.error-text {
+  color: #b00020;
+  font-size: 12px;
+  margin-top: 4px;
+}

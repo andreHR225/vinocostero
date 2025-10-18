@@ -7,24 +7,93 @@ export default function Diseases(){
   const [form, setForm] = React.useState({ name:'', severity:'', notes:'' });
   const [editing, setEditing] = React.useState(null);
 
+  // validación / errores
+  const [errors, setErrors] = React.useState({});
+  const [touched, setTouched] = React.useState({ name: false });
+  const [apiError, setApiError] = React.useState(null);
+
   const token = getToken();
   const payload = token ? parseJwt(token) : null;
   const isAdmin = payload?.role === 'admin';
 
-  const load = async () => setRows(await get('/diseases'));
+  const load = async () => {
+    setApiError(null);
+    setRows(await get('/diseases'));
+  };
   React.useEffect(()=>{ load(); }, []);
+
+  const validate = (data = form) => {
+    const e = {};
+    if (!data.name || !data.name.trim()) e.name = 'El nombre es obligatorio';
+    return e;
+    // si quisieras validar severidad:
+    // if (!['Alta','Media','Baja',''].includes((data.severity||'').trim())) e.severity = 'Severidad inválida';
+  };
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    if(!form.name) return;
-    if(editing){
-      await put(`/diseases/${editing.id}`, form);
-      setEditing(null);
-    }else{
-      await post('/diseases', form);
+    setApiError(null);
+
+    const v = validate();
+    setErrors(v);
+    setTouched({ name: true });
+    if (Object.keys(v).length) return;
+
+    const body = {
+      name: form.name.trim(),
+      severity: form.severity?.trim() || undefined,
+      notes: form.notes?.trim() || undefined
+    };
+
+    try {
+      if (editing) {
+        await put(`/diseases/${editing.id}`, body);
+        setEditing(null);
+      } else {
+        await post('/diseases', body);
+      }
+      setForm({ name:'', severity:'', notes:'' });
+      setTouched({ name: false });
+      setErrors({});
+      load();
+    } catch (err) {
+      const msg = err?.data?.message || err?.message || '';
+      if (err?.status === 400 || err?.status === 422) {
+        setApiError('Revisa los campos: nombre es obligatorio.');
+      } else if (err?.status === 409 || /P2002|duplicate|unique/i.test(msg)) {
+        setApiError('Ya existe una enfermedad con ese nombre.');
+      } else {
+        setApiError('Ocurrió un error. Intenta de nuevo.');
+      }
     }
-    setForm({ name:'', severity:'', notes:'' });
-    load();
+  };
+
+  const onEdit = (row) => {
+    setEditing(row);
+    setForm({ name: row.name, severity: row.severity || '', notes: row.notes || '' });
+    setErrors({});
+    setTouched({ name: false });
+    setApiError(null);
+  };
+
+  const onDelete = async (row) => {
+    if(!confirm('¿Eliminar enfermedad?')) return;
+    setApiError(null);
+    try {
+      await delReq(`/diseases/${row.id}`);
+      load();
+    } catch (err) {
+      setApiError('No se pudo eliminar. Intenta de nuevo.');
+    }
+  };
+
+  const onChangeName = (val) => {
+    const next = { ...form, name: val };
+    setForm(next);
+    if (touched.name) {
+      const v = validate(next);
+      setErrors({ ...errors, name: v.name || null });
+    }
   };
 
   const columns = [
@@ -39,22 +108,79 @@ export default function Diseases(){
       <h3>Enfermedades</h3>
 
       {isAdmin ? (
-        <form onSubmit={onSubmit} style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
-          <input placeholder="Nombre" value={form.name} onChange={e=>setForm({...form, name:e.target.value})} />
-          <input placeholder="Severidad" value={form.severity} onChange={e=>setForm({...form, severity:e.target.value})} />
-          <input placeholder="Notas" value={form.notes} onChange={e=>setForm({...form, notes:e.target.value})} />
-          <button>{editing ? 'Actualizar' : 'Crear'}</button>
-          {editing && <button type="button" className="secondary" onClick={()=>{ setEditing(null); setForm({name:'', severity:'', notes:''}) }}>Cancelar</button>}
+        <form
+          onSubmit={onSubmit}
+          style={{ display:'grid', gridTemplateColumns:'2fr 1fr 2fr auto auto', gap:8, marginBottom:16 }}
+          noValidate
+        >
+          <div style={{ display:'flex', flexDirection:'column' }}>
+            <input
+              placeholder="Nombre *"
+              value={form.name}
+              onChange={e => onChangeName(e.target.value)}
+              onBlur={()=>{
+                setTouched({ ...touched, name: true });
+                const v = validate();
+                setErrors({ ...errors, name: v.name || null });
+              }}
+            />
+            {touched.name && errors.name && (
+              <small className="error-text">{errors.name}</small>
+            )}
+          </div>
+
+          {/* Puedes convertir Severidad en <select> si quieres */}
+          <input
+            placeholder="Severidad (opcional)"
+            value={form.severity}
+            onChange={e=>setForm({ ...form, severity: e.target.value })}
+          />
+
+          <input
+            placeholder="Notas (opcional)"
+            value={form.notes}
+            onChange={e=>setForm({ ...form, notes: e.target.value })}
+          />
+
+          <button type="submit">
+            {editing ? 'Actualizar' : 'Crear'}
+          </button>
+
+          {editing && (
+            <button
+              type="button"
+              className="secondary"
+              onClick={()=>{
+                setEditing(null);
+                setForm({ name:'', severity:'', notes:'' });
+                setErrors({});
+                setTouched({ name: false });
+                setApiError(null);
+              }}
+            >
+              Cancelar
+            </button>
+          )}
+
+          {apiError && (
+            <div className="alert-error" style={{ gridColumn:'1 / -1' }}>
+              {apiError}
+            </div>
+          )}
         </form>
-      ) : <p style={{opacity:.7, marginBottom:16}}>Solo lectura (inicia como <b>admin</b> para crear/editar).</p>}
+      ) : (
+        <p style={{opacity:.7, marginBottom:16}}>
+          Solo lectura (inicia como <b>admin</b> para crear/editar).
+        </p>
+      )}
 
       <Table
         columns={columns}
         data={rows}
         actions={isAdmin ? (row)=>(
           <>
-            <button onClick={()=>{ setEditing(row); setForm({ name: row.name, severity: row.severity || '', notes: row.notes || '' }) }} style={{ marginRight:8 }}>Editar</button>
-            <button className="danger" onClick={async()=>{ if(confirm('¿Eliminar?')){ await delReq(`/diseases/${row.id}`); load(); } }}>Eliminar</button>
+            <button onClick={()=>onEdit(row)} style={{ marginRight:8 }}>Editar</button>
+            <button className="danger" onClick={()=>onDelete(row)}>Eliminar</button>
           </>
         ) : null}
       />
